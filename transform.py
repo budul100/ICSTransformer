@@ -2,7 +2,7 @@ import re
 import json
 from pathlib import Path
 from datetime import datetime, timezone as dt_timezone
-from icalendar import Calendar, Event
+from icalendar import Calendar, Event, Timezone, TimezoneStandard, TimezoneDaylight
 
 try:
     from timezonefinder import TimezoneFinder
@@ -100,6 +100,31 @@ def apply_geo_timezone(event: Event, geo_swapped: bool = False):
         event.add(field, dt_local)
 
 
+def build_vtimezone(tz_name: str) -> Timezone:
+    """Build a VTIMEZONE component for the given IANA timezone name."""
+    tz = pytz.timezone(tz_name)
+    tzc = Timezone()
+    tzc.add("TZID", tz_name)
+
+    # Standard time (winter)
+    std = TimezoneStandard()
+    std.add("TZNAME", tz.localize(datetime(2026, 1, 1)).strftime("%Z"))
+    std.add("DTSTART", datetime(1970, 1, 1))
+    std.add("TZOFFSETFROM", tz.localize(datetime(2026, 6, 1)).utcoffset())
+    std.add("TZOFFSETTO", tz.localize(datetime(2026, 1, 1)).utcoffset())
+    tzc.add_component(std)
+
+    # Daylight time (summer)
+    dst = TimezoneDaylight()
+    dst.add("TZNAME", tz.localize(datetime(2026, 6, 1)).strftime("%Z"))
+    dst.add("DTSTART", datetime(1970, 6, 1))
+    dst.add("TZOFFSETFROM", tz.localize(datetime(2026, 1, 1)).utcoffset())
+    dst.add("TZOFFSETTO", tz.localize(datetime(2026, 6, 1)).utcoffset())
+    tzc.add_component(dst)
+
+    return tzc
+
+
 def transform_ics(input_path: str, rules_path: str, output_path: str):
     rules = load_rules(rules_path)
     cal_data = Path(input_path).read_bytes()
@@ -123,13 +148,31 @@ def transform_ics(input_path: str, rules_path: str, output_path: str):
     events = [c for c in cal.walk() if c.name == "VEVENT"]
     print(f"Processing {len(events)} event(s)...")
 
+    used_timezones = set()
+
     for i, component in enumerate(cal.walk()):
         if component.name == "VEVENT":
             summary = str(component.get("SUMMARY", "?"))
             print(f"  [{i}] {summary}")
             transform_event(component, source_rules, global_rules)
             apply_geo_timezone(component, geo_swapped=geo_swapped)
+
+            # Collect timezone names used
+            for field in ("DTSTART", "DTEND"):
+                if field in component:
+                    dt = component.decoded(field)
+                    if isinstance(dt, datetime) and dt.tzinfo is not None:
+                        tz_name = dt.tzinfo.zone if hasattr(dt.tzinfo, "zone") else str(dt.tzinfo)
+                        used_timezones.add(tz_name)
+
             new_cal.add_component(component)
+
+    # Insert VTIMEZONE components
+    for tz_name in used_timezones:
+        try:
+            new_cal.add_component(build_vtimezone(tz_name))
+        except Exception as e:
+            print(f"Warning: Could not build VTIMEZONE for {tz_name}: {e}")
 
     Path(output_path).write_bytes(new_cal.to_ical())
     print(f"\nDone: {output_path}")
