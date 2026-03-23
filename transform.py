@@ -27,11 +27,17 @@ def apply_rules(value: str, rules: list) -> str:
 def transform_event(event: Event, rules: list, global_rules: list) -> Event:
     for rule in global_rules + rules:
         field = rule["field"]
-        if field not in event:
-            continue
         if rule.get("delete", False):
-            del event[field]
+            if field in event:
+                del event[field]
+        elif "set" in rule:
+            # Overwrite or create field regardless of current value
+            if field in event:
+                del event[field]
+            event.add(field, rule["set"])
         else:
+            if field not in event:
+                continue
             original = str(event[field])
             transformed = apply_rules(original, [rule])
             event[field] = transformed

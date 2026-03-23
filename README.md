@@ -72,6 +72,35 @@ Use this to remove `ORGANIZER` and `ATTENDEE` fields, which cause Outlook to tre
 
 Capture groups are referenced as `\\1`, `\\2`, `\\3` etc. in the `replace` value.
 
+### Set a field to a fixed value
+
+```json
+{
+  "field": "CATEGORIES",
+  "set": "@Journey"
+}
+```
+
+Creates or overwrites the field with a fixed value, regardless of its current content. Useful for assigning Outlook categories based on the event source.
+
+For Outlook busy status, use the Microsoft-specific field `X-MICROSOFT-CDO-BUSYSTATUS`:
+
+```json
+{
+  "field": "X-MICROSOFT-CDO-BUSYSTATUS",
+  "set": "OOF"
+}
+```
+
+Available values:
+
+| Value | Outlook display |
+|---|---|
+| `FREE` | Free |
+| `BUSY` | Busy (default) |
+| `TENTATIVE` | Tentative |
+| `OOF` | Out of Office |
+
 ### Source matching
 
 Sources are identified by matching a field (usually `PRODID`) against a regex pattern:
