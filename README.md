@@ -8,9 +8,11 @@ A lightweight Python tool to transform `.ics` calendar files using configurable 
 
 - Python 3.10+
 - `icalendar` library
+- `timezonefinder` library
+- `pytz` library
 
 ```bash
-pip install icalendar
+pip install icalendar timezonefinder pytz
 ```
 
 ---
@@ -101,6 +103,21 @@ Available values:
 | `TENTATIVE` | Tentative |
 | `OOF` | Out of Office |
 
+### Copy and transform a value from another field
+
+```json
+{
+  "field": "LOCATION",
+  "copy_from": "SUMMARY",
+  "pattern": ".*Flight to: .+ from .+\\n\\s*\\((.+)\\)",
+  "replace": "[\\1]"
+}
+```
+
+Reads the value from `copy_from`, applies the regex, and writes the result into `field`. Useful for extracting partial information from one field into another (e.g. flight number from SUMMARY into LOCATION).
+
+> **Note:** Place `copy_from` rules before any regex transforms on the source field, so they still read the original value.
+
 ### Source matching
 
 Sources are identified by matching a field (usually `PRODID`) against a regex pattern:
@@ -149,6 +166,29 @@ Open `transform.bat` in a text editor and set the path to your script directory:
 
 ```bat
 set SCRIPT_DIR=C:\Users\YourName\Documents\ics_transformer
+```
+
+---
+
+## Automatic Timezone Detection
+
+If a VEVENT contains a `GEO` field, the script automatically converts `DTSTART` and `DTEND` from UTC to the local timezone of the departure location.
+
+Example: a flight departing Berlin (`GEO:13.405;52.52`) with `DTSTART:20260415T093000Z` becomes `DTSTART;TZID=Europe/Berlin:20260415T113000`.
+
+This requires `timezonefinder` and `pytz` to be installed. If either is missing, the script falls back to UTC without error.
+
+### Non-standard GEO order
+
+Some sources (e.g. TravelPerk) write `GEO` as `longitude;latitude` instead of the standard `latitude;longitude`. This causes incorrect timezone detection. Set `geo_swapped: true` in the source definition to fix this:
+
+```json
+{
+  "name": "TravelPerk",
+  "match": { "field": "PRODID", "pattern": ".*travelperk.*" },
+  "geo_swapped": true,
+  "rules": [ ... ]
+}
 ```
 
 ---
