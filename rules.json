@@ -1,10 +1,17 @@
-﻿{
+{
   "sources": [
     {
-      "name": "TravelPerk",
-      "match": { "field": "PRODID", "pattern": ".*travelperk.*" },
+      "name": "TravelPerk – Flights",
+      "match": {
+        "field": "PRODID",
+        "pattern": ".*travelperk.*"
+      },
+      "event_match": {
+        "field": "DESCRIPTION",
+        "pattern": "Flight Information"
+      },
       "geo_swapped": true,
-        "rules": [
+      "rules": [
         {
           "field": "LOCATION",
           "copy_from": "SUMMARY",
@@ -24,7 +31,39 @@
           "field": "X-MICROSOFT-CDO-BUSYSTATUS",
           "set": "OOF"
         }
-]
+      ]
+    },
+    {
+      "name": "TravelPerk – Stays",
+      "match": {
+        "field": "PRODID",
+        "pattern": ".*travelperk.*"
+      },
+      "event_match": {
+        "field": "DESCRIPTION",
+        "pattern": "Hotel information"
+      },
+      "geo_swapped": true,
+      "expand_nightly": {
+        "time_start": "22:00",
+        "time_end": "08:00",
+        "mode": "series"
+      },
+      "rules": [
+        {
+          "field": "SUMMARY",
+          "pattern": ".+Stay at (.+)",
+          "replace": "Hotel: \\1"
+        },
+        {
+          "field": "CATEGORIES",
+          "set": "@Reise"
+        },
+        {
+          "field": "X-MICROSOFT-CDO-BUSYSTATUS",
+          "set": "OOF"
+        }
+      ]
     }
   ],
   "global_rules": [
@@ -48,9 +87,9 @@
       "pattern": "\\n",
       "replace": " "
     },
-    { 
-      "field": "ATTENDEE", 
-      "delete": true 
+    {
+      "field": "ATTENDEE",
+      "delete": true
     },
     {
       "field": "ORGANIZER",
