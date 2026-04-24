@@ -1,99 +1,127 @@
 {
-  "sources": [
-    {
-      "name": "TravelPerk – Flights",
-      "match": {
-        "field": "PRODID",
-        "pattern": ".*travelperk.*"
-      },
-      "event_match": {
-        "field": "DESCRIPTION",
-        "pattern": "Flight Information"
-      },
-      "geo_swapped": true,
-      "rules": [
-        {
-          "field": "LOCATION",
-          "copy_from": "SUMMARY",
-          "pattern": ".*Flight to: .+ from .+\\((.+)\\)",
-          "replace": "[\\1]"
-        },
-        {
-          "field": "SUMMARY",
-          "pattern": ".*Flight to: (\\S.*\\S) from (\\S.+\\S)\\s*\\(.*",
-          "replace": "Flight: \\2 -> \\1"
-        },
-        {
-          "field": "CATEGORIES",
-          "set": "@Reise"
-        },
-        {
-          "field": "X-MICROSOFT-CDO-BUSYSTATUS",
-          "set": "OOF"
-        }
-      ]
-    },
-    {
-      "name": "TravelPerk – Stays",
-      "match": {
-        "field": "PRODID",
-        "pattern": ".*travelperk.*"
-      },
-      "event_match": {
-        "field": "DESCRIPTION",
-        "pattern": "Hotel information"
-      },
-      "geo_swapped": true,
-      "expand_nightly": {
-        "time_start": "22:00",
-        "time_end": "08:00",
-        "mode": "series"
-      },
-      "rules": [
-        {
-          "field": "SUMMARY",
-          "pattern": ".+Stay at (.+)",
-          "replace": "Hotel: \\1"
-        },
-        {
-          "field": "CATEGORIES",
-          "set": "@Reise"
-        },
-        {
-          "field": "X-MICROSOFT-CDO-BUSYSTATUS",
-          "set": "OOF"
-        }
-      ]
-    }
-  ],
-  "global_rules": [
-    {
-      "field": "DESCRIPTION",
-      "pattern": "\\r\\n",
-      "replace": "\\n"
-    },
-    {
-      "field": "DESCRIPTION",
-      "pattern": "\\n\\s*\\n",
-      "replace": "\\n\\n"
-    },
-    {
-      "field": "DESCRIPTION",
-      "pattern": "\\n\\n\\n",
-      "replace": "\\n\\n"
-    },
-    {
-      "field": "SUMMARY",
-      "pattern": "\\n",
-      "replace": " "
-    },
-    {
-      "field": "ATTENDEE",
-      "delete": true
-    },
-    {
-      "field": "ORGANIZER",
-      "delete": true
-    }
-  ]
+	"sources": [
+		{
+			"name": "TravelPerk – Stays",
+			"match": {
+				"field": "PRODID",
+				"pattern": ".*travelperk.*"
+			},
+			"event_match": {
+				"field": "SUMMARY",
+				"pattern": "Stay at"
+			},
+			"geo_swapped": true,
+			"expand_nightly": {
+				"time_start": "22:00",
+				"time_end": "08:00",
+				"mode": "series"
+			},
+			"rules": [
+				{
+					"field": "SUMMARY",
+					"pattern": ".+Stay at (.+)",
+					"replace": "Hotel: \\1"
+				},
+				{
+					"field": "CATEGORIES",
+					"set": "@Reise"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-BUSYSTATUS",
+					"set": "OOF"
+				}
+			]
+		},
+		{
+			"name": "TravelPerk – Flights",
+			"match": {
+				"field": "PRODID",
+				"pattern": ".*travelperk.*"
+			},
+			"event_match": {
+				"field": "SUMMARY",
+				"pattern": "Flight to"
+			},
+			"geo_swapped": true,
+			"rules": [
+				{
+					"field": "LOCATION",
+					"copy_from": "SUMMARY",
+					"pattern": ".*Flight to: .+ from .+\\((.+)\\)",
+					"replace": "[\\1]"
+				},
+				{
+					"field": "SUMMARY",
+					"pattern": ".*Flight to: (\\S.*\\S) from (\\S.+\\S)\\s*\\(.*",
+					"replace": "Flight: \\2 -> \\1"
+				},
+				{
+					"field": "CATEGORIES",
+					"set": "@Reise"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-BUSYSTATUS",
+					"set": "OOF"
+				}
+			]
+		},
+		{
+			"name": "TravelPerk – Trains",
+			"match": {
+				"field": "PRODID",
+				"pattern": ".*travelperk.*"
+			},
+			"event_match": {
+				"field": "SUMMARY",
+				"pattern": "Train to"
+			},
+			"geo_swapped": true,
+			"rules": [
+				{
+					"field": "SUMMARY",
+					"copy_from": "DESCRIPTION",
+					"pattern": "From: (.+?) \\d+:\\d+[AP]M\\nTo: (.+?) \\d+:\\d+[AP]M[\\s\\S]*",
+					"replace": "Trip: \\1 -> \\2"
+				},
+				{
+					"field": "CATEGORIES",
+					"set": "@Reise"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-BUSYSTATUS",
+					"set": "OOF"
+				}
+			]
+		}
+	],
+	"global_rules": [
+		{
+			"field": "DESCRIPTION",
+			"pattern": "\\r\\n",
+			"replace": "\\n"
+		},
+		{
+			"field": "DESCRIPTION",
+			"pattern": "\\n\\s*\\n",
+			"replace": "\\n\\n"
+		},
+		{
+			"field": "DESCRIPTION",
+			"pattern": "\\n\\n\\n",
+			"replace": "\\n\\n"
+		},
+		{
+			"field": "SUMMARY",
+			"pattern": "\\n",
+			"replace": " "
+		},
+		{
+			"field": "ATTENDEE",
+			"delete": true
+		},
+		{
+			"field": "ORGANIZER",
+			"delete": true
+		}
+	]
 }
