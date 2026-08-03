@@ -92,6 +92,68 @@
 					"set": "OOF"
 				}
 			]
+		},
+		{
+			"name": "calovo – ALBA Home",
+			"match": {
+				"field": "PRODID",
+				"pattern": ".*calovo.*"
+			},
+			"event_match": {
+				"field": "SUMMARY",
+				"pattern": "^ALBA BERLIN\\s*-\\s"
+			},
+			"exclusive": true,
+			"rules": [
+				{
+					"field": "SUMMARY",
+					"pattern": "^ALBA BERLIN\\s*-\\s*([^|]+?)\\s*\\|\\s*([^|]+?)\\s*(?:\\|.*)?$",
+					"replace": "Live: \\2 - ALBA Berlin vs. \\1"
+				},
+				{
+					"field": "SUMMARY",
+					"pattern": "^Live:\\seasyCredit\\sBBL\\s(.*)$",
+					"replace": "Live: BBL \\1"
+				},
+				{
+					"field": "SUMMARY",
+					"pattern": "^Live:\\sBasketball\\sChampionsLeague\\s(.*)$",
+					"replace": "Live: BCL \\1"
+				},
+				{
+					"field": "LOCATION",
+					"pattern": "^\\s*calovo\\.de\\s*\\|\\s*(.*)$",
+					"replace": "\\1"
+				},
+				{
+					"field": "DESCRIPTION",
+					"set": "Weitere Infos unter https://www.albaberlin.de/spielplan/"
+				},
+				{
+					"field": "CATEGORIES",
+					"set": "@Sport"
+				},
+				{
+					"field": "CLASS",
+					"set": "PRIVATE"
+				},
+				{
+					"field": "TRANSP",
+					"set": "OPAQUE"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-BUSYSTATUS",
+					"set": "OOF"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-INTENDEDSTATUS",
+					"set": "OOF"
+				},
+				{
+					"field": "URL",
+					"delete": true
+				}
+			]
 		}
 	],
 	"global_rules": [

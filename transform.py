@@ -46,6 +46,19 @@ def event_matches_source(event: Event, source: dict) -> bool:
         return False
 
 
+def event_excluded(event: Event, source: dict) -> bool:
+    """Check optional event-level exclude. Matching events are dropped entirely."""
+    ex = source.get("event_exclude")
+    if not ex:
+        return False
+    field_val = str(event.get(ex.get("field", "SUMMARY"), ""))
+    try:
+        return bool(re.search(ex.get("pattern", "(?!)"), field_val))
+    except re.error as e:
+        print(f"Warning: Invalid regex in event_exclude for '{source.get('name', '?')}': {e}")
+        return False
+
+
 def apply_rules(value: str, rules: list) -> str:
     for rule in rules:
         value = re.sub(rule["pattern"], rule["replace"], value)
@@ -252,6 +265,20 @@ def transform_ics(input_path: str, rules_path: str, output_path: str):
         event_sources = [s for s in cal_sources if event_matches_source(component, s)]
         for src in event_sources:
             print(f"    -> Matched event source: {src.get('name', '?')}")
+
+        # Filter 1: exclusive calendar sources drop every event that matched no source
+        if not event_sources:
+            exclusive = [s for s in cal_sources if s.get("exclusive", False)]
+            if exclusive:
+                names = ", ".join(s.get("name", "?") for s in exclusive)
+                print(f"    -> Skipped: no source matched in exclusive calendar ({names})")
+                continue
+
+        # Filter 2: explicit per-source exclude on a source that did match
+        excluding = [s for s in event_sources if event_excluded(component, s)]
+        if excluding:
+            print(f"    -> Skipped: excluded by source '{excluding[0].get('name', '?')}'")
+            continue
 
         source_rules = []
         geo_swapped  = False

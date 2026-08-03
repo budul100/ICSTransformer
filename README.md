@@ -76,7 +76,49 @@ Rules are split into two levels:
 
 If `event_match` is omitted, the source rules apply to all events in the matched calendar.
 
+> **Note:** `event_match` only decides whether the source rules are applied. Non-matching events are still written to the output, just untransformed. To drop events entirely, see *Filtering events out* below.
+
 > **Note:** Use `.*keyword.*` syntax for partial matches. Plain wildcards like `*keyword*` are not valid regex.
+
+---
+
+### Filtering events out
+
+Two independent mechanisms remove events from the output. Both are optional and can be combined.
+
+**`exclusive`** (source-level flag): once any matched calendar source is marked exclusive, every event that matched **no** source at all is dropped. Combine it with a narrow `event_match` to build a whitelist:
+
+```json
+{
+  "name": "My Source – Home games only",
+  "match": { "field": "PRODID", "pattern": ".*mysource.*" },
+  "event_match": { "field": "SUMMARY", "pattern": "^My Team\\s*-\\s" },
+  "exclusive": true,
+  "rules": [ ... ]
+}
+```
+
+**`event_exclude`** (per-source blacklist): evaluated only on events that already matched the source. Matching events are dropped:
+
+```json
+{
+  "name": "My Source",
+  "match": { "field": "PRODID", "pattern": ".*mysource.*" },
+  "event_exclude": { "field": "SUMMARY", "pattern": "Cancelled|Postponed" },
+  "rules": [ ... ]
+}
+```
+
+| | `exclusive` | `event_exclude` |
+|---|---|---|
+| Scope | Whole calendar, all unmatched events | Only events matched by this source |
+| Logic | Whitelist (keep what matches) | Blacklist (drop what matches) |
+| Typical pattern | Narrow `event_match` | Negative match, e.g. `^(?!Keep this)` |
+| Risk | A too-broad `match` silently deletes events from other calendars | None beyond the source itself |
+
+> **Warning:** `exclusive` acts at calendar level, not source level. If its `match` pattern also hits a calendar handled by other sources, any event without a matching source in that calendar disappears. Always use a precise `PRODID` pattern with `exclusive`.
+
+Both filters log their decision to the console, e.g. `-> Skipped: excluded by source 'My Source'`.
 
 ---
 
@@ -128,6 +170,17 @@ Available values:
 | `BUSY` | Busy (default) |
 | `TENTATIVE` | Tentative |
 | `OOF` | Out of Office |
+
+`X-MICROSOFT-CDO-BUSYSTATUS` alone is not always enough. Two standard fields matter as well:
+
+```json
+{ "field": "TRANSP", "set": "OPAQUE" },
+{ "field": "CLASS",  "set": "PRIVATE" }
+```
+
+`TRANSP` must be `OPAQUE` for the event to block time at all. Sources that export events as `TRANSPARENT` will show up as free regardless of the busy status. Some clients also honour `X-MICROSOFT-CDO-INTENDEDSTATUS`, so setting both CDO fields to the same value is the safer option.
+
+`CLASS` controls visibility: `PUBLIC` (default), `PRIVATE`, or `CONFIDENTIAL`.
 
 ### Copy and transform a value from another field
 
@@ -246,6 +299,30 @@ Some sources (e.g. TravelPerk) write `GEO` as `longitude;latitude` instead of th
         { "field": "CATEGORIES", "set": "@Journey" },
         { "field": "X-MICROSOFT-CDO-BUSYSTATUS", "set": "OOF" }
       ]
+    },
+    {
+      "name": "calovo – Home games only",
+      "match": { "field": "PRODID", "pattern": ".*calovo.*" },
+      "event_match": { "field": "SUMMARY", "pattern": "^MY TEAM\\s*-\\s" },
+      "exclusive": true,
+      "rules": [
+        {
+          "field": "SUMMARY",
+          "pattern": "^MY TEAM\\s*-\\s*([^|]+?)\\s*\\|\\s*([^|]+?)\\s*(?:\\|.*)?$",
+          "replace": "Live: \\2 - My Team vs. \\1"
+        },
+        {
+          "field": "LOCATION",
+          "pattern": "^\\s*calovo\\.de\\s*\\|\\s*(.*)$",
+          "replace": "\\1"
+        },
+        { "field": "DESCRIPTION", "set": "More info at https://example.com/schedule/" },
+        { "field": "CLASS",  "set": "PRIVATE" },
+        { "field": "TRANSP", "set": "OPAQUE" },
+        { "field": "X-MICROSOFT-CDO-BUSYSTATUS",     "set": "OOF" },
+        { "field": "X-MICROSOFT-CDO-INTENDEDSTATUS", "set": "OOF" },
+        { "field": "URL", "delete": true }
+      ]
     }
   ]
 }
@@ -272,6 +349,14 @@ set SCRIPT_DIR=C:\Users\YourName\Documents\ics_transformer
 
 **Event-level rule not applying**
 - Check the `event_match` pattern against the actual `DESCRIPTION` (or whichever field you're matching). Copy the raw value from the `.ics` file to verify.
+
+**Events missing from the output**
+- Check the console log. Both filters print a `-> Skipped: ...` line naming the responsible source.
+- If the log points to an exclusive calendar, an `exclusive` source is matching a calendar it was not meant for. Narrow its `match` pattern.
+
+**Regex silently does nothing**
+- A `pattern` that does not match leaves the field at its original value without any warning. Verify the transformed field in the output file, not just the console log.
+- Field names in rules are not validated. A rule targeting a field that does not exist in the event is skipped without notice, so typos stay invisible.
 
 **JSON parse error (BOM)**
 - Save `rules.json` as **UTF-8** or **UTF-8 without BOM**. The script handles both via `utf-8-sig` encoding.
