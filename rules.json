@@ -1,10 +1,10 @@
 {
 	"sources": [
 		{
-			"name": "TravelPerk – Stays",
+			"name": "Perk – Stays",
 			"match": {
 				"field": "PRODID",
-				"pattern": ".*travelperk.*"
+				"pattern": ".*perk.com.*"
 			},
 			"event_match": {
 				"field": "SUMMARY",
@@ -19,7 +19,7 @@
 			"rules": [
 				{
 					"field": "SUMMARY",
-					"pattern": ".+Stay at (.+)",
+					"pattern": ".+Stay at:? (.+)",
 					"replace": "Hotel: \\1"
 				},
 				{
@@ -33,10 +33,10 @@
 			]
 		},
 		{
-			"name": "TravelPerk – Flights",
+			"name": "Perk – Flights",
 			"match": {
 				"field": "PRODID",
-				"pattern": ".*travelperk.*"
+				"pattern": ".*perk.com.*"
 			},
 			"event_match": {
 				"field": "SUMMARY",
@@ -47,12 +47,12 @@
 				{
 					"field": "LOCATION",
 					"copy_from": "SUMMARY",
-					"pattern": ".*Flight to: .+ from .+\\((.+)\\)",
+					"pattern": ".*Flight to:? .+ from .+\\((.+)\\)",
 					"replace": "[\\1]"
 				},
 				{
 					"field": "SUMMARY",
-					"pattern": ".*Flight to: (\\S.*\\S) from (\\S.+\\S)\\s*\\(.*",
+					"pattern": ".*Flight to:? (\\S.*\\S) from (\\S.+\\S)\\s*\\(.*",
 					"replace": "Flight: \\2 -> \\1"
 				},
 				{
@@ -66,10 +66,10 @@
 			]
 		},
 		{
-			"name": "TravelPerk – Trains",
+			"name": "Perk – Trains",
 			"match": {
 				"field": "PRODID",
-				"pattern": ".*travelperk.*"
+				"pattern": ".*perk.com.*"
 			},
 			"event_match": {
 				"field": "SUMMARY",
@@ -80,7 +80,7 @@
 				{
 					"field": "SUMMARY",
 					"copy_from": "DESCRIPTION",
-					"pattern": "From: (.+?) \\d+:\\d+[AP]M\\nTo: (.+?) \\d+:\\d+[AP]M[\\s\\S]*",
+					"pattern": "From:? (.+?) \\d+:\\d+[AP]M\\nTo:? (.+?) \\d+:\\d+[AP]M[\\s\\S]*",
 					"replace": "Trip: \\1 -> \\2"
 				},
 				{
