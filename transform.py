@@ -10,6 +10,7 @@ try:
     _tf = TimezoneFinder()
     TIMEZONE_SUPPORT = True
 except ImportError:
+    pytz = None
     TIMEZONE_SUPPORT = False
     print("Warning: timezonefinder or pytz not installed. Timezone conversion disabled.")
 
@@ -97,21 +98,13 @@ def transform_event(event: Event, rules: list, global_rules: list) -> Event:
 
 def apply_geo_timezone(event: Event, geo_swapped: bool = False):
     """Convert DTSTART/DTEND from UTC to local timezone based on GEO field."""
-    if not TIMEZONE_SUPPORT:
-        return
-    if "GEO" not in event or "DTSTART" not in event:
+    if not TIMEZONE_SUPPORT or "GEO" not in event or "DTSTART" not in event:
         return
 
-    geo = event.get("GEO")
-    if geo_swapped:
-        lng, lat = float(geo.latitude), float(geo.longitude)
-    else:
-        lat, lng = float(geo.latitude), float(geo.longitude)
-
+    lat, lng = read_geo(event, geo_swapped)
     tz_name = _tf.timezone_at(lat=lat, lng=lng)
     if not tz_name:
         return
-
     tz = pytz.timezone(tz_name)
 
     for field in ("DTSTART", "DTEND"):
@@ -130,16 +123,19 @@ def apply_geo_timezone(event: Event, geo_swapped: bool = False):
 def resolve_geo_timezone(event: Event, geo_swapped: bool = False):
     """Return a pytz timezone based on the GEO field, or UTC as fallback."""
     if TIMEZONE_SUPPORT and "GEO" in event:
-        geo = event.get("GEO")
-        if geo_swapped:
-            lng, lat = float(geo.latitude), float(geo.longitude)
-        else:
-            lat, lng = float(geo.latitude), float(geo.longitude)
+        lat, lng = read_geo(event, geo_swapped)
         tz_name = _tf.timezone_at(lat=lat, lng=lng)
         if tz_name:
             return pytz.timezone(tz_name)
     return pytz.utc if TIMEZONE_SUPPORT else None
 
+def read_geo(event: Event, geo_swapped: bool = False):
+    """Return (lat, lng) from GEO, swapping if flagged or if latitude is out of range."""
+    geo = event.get("GEO")
+    lat, lng = float(geo.latitude), float(geo.longitude)
+    if geo_swapped or (abs(lat) > 90 and abs(lng) <= 90):
+        lat, lng = lng, lat
+    return lat, lng
 
 def expand_nightly(event: Event, expand_rule: dict, geo_swapped: bool = False) -> list:
     """
