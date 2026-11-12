@@ -94,6 +94,60 @@
 			]
 		},
 		{
+			"name": "Perk – Car rentals",
+			"match": {
+				"field": "PRODID",
+				"pattern": ".*perk.com.*"
+			},
+			"event_match": {
+				"field": "SUMMARY",
+				"pattern": "Car rental"
+			},
+			"geo_swapped": true,
+			"rules": [
+				{
+					"field": "CATEGORIES",
+					"set": "@Reise"
+				},
+				{
+					"field": "X-MICROSOFT-CDO-BUSYSTATUS",
+					"set": "OOF"
+				}
+			],
+			"split_events": [
+				{
+					"summary": "Car: Pick-Up",
+					"uid_suffix": "pickup",
+					"anchor": "end",
+					"minutes_before": 15,
+					"datetime": {
+						"field": "DESCRIPTION",
+						"pattern": "Pick-up: \\w+ (\\d{1,2} \\w+ \\d{1,2}:\\d{2}[AP]M)",
+						"format": "%d %B %I:%M%p"
+					},
+					"location": {
+						"field": "DESCRIPTION",
+						"pattern": "Pick-up location: (.+)"
+					}
+				},
+				{
+					"summary": "Car: Drop-Off",
+					"uid_suffix": "dropoff",
+					"anchor": "end",
+					"minutes_before": 15,
+					"datetime": {
+						"field": "DESCRIPTION",
+						"pattern": "Drop-off: \\w+ (\\d{1,2} \\w+ \\d{1,2}:\\d{2}[AP]M)",
+						"format": "%d %B %I:%M%p"
+					},
+					"location": {
+						"field": "DESCRIPTION",
+						"pattern": "Drop-off location: (.+)"
+					}
+				}
+			]
+		},
+		{
 			"name": "calovo – ALBA Home",
 			"match": {
 				"field": "PRODID",

@@ -10,7 +10,6 @@ try:
     _tf = TimezoneFinder()
     TIMEZONE_SUPPORT = True
 except ImportError:
-    pytz = None
     TIMEZONE_SUPPORT = False
     print("Warning: timezonefinder or pytz not installed. Timezone conversion disabled.")
 
@@ -96,6 +95,15 @@ def transform_event(event: Event, rules: list, global_rules: list) -> Event:
     return event
 
 
+def read_geo(event: Event, geo_swapped: bool = False):
+    """Return (lat, lng) from GEO. Swaps if flagged or if the latitude is out of range."""
+    geo = event.get("GEO")
+    lat, lng = float(geo.latitude), float(geo.longitude)
+    if geo_swapped or (abs(lat) > 90 and abs(lng) <= 90):
+        lat, lng = lng, lat
+    return lat, lng
+
+
 def apply_geo_timezone(event: Event, geo_swapped: bool = False):
     """Convert DTSTART/DTEND from UTC to local timezone based on GEO field."""
     if not TIMEZONE_SUPPORT or "GEO" not in event or "DTSTART" not in event:
@@ -105,6 +113,7 @@ def apply_geo_timezone(event: Event, geo_swapped: bool = False):
     tz_name = _tf.timezone_at(lat=lat, lng=lng)
     if not tz_name:
         return
+
     tz = pytz.timezone(tz_name)
 
     for field in ("DTSTART", "DTEND"):
@@ -129,13 +138,6 @@ def resolve_geo_timezone(event: Event, geo_swapped: bool = False):
             return pytz.timezone(tz_name)
     return pytz.utc if TIMEZONE_SUPPORT else None
 
-def read_geo(event: Event, geo_swapped: bool = False):
-    """Return (lat, lng) from GEO, swapping if flagged or if latitude is out of range."""
-    geo = event.get("GEO")
-    lat, lng = float(geo.latitude), float(geo.longitude)
-    if geo_swapped or (abs(lat) > 90 and abs(lng) <= 90):
-        lat, lng = lng, lat
-    return lat, lng
 
 def expand_nightly(event: Event, expand_rule: dict, geo_swapped: bool = False) -> list:
     """
@@ -196,6 +198,84 @@ def expand_nightly(event: Event, expand_rule: dict, geo_swapped: bool = False) -
             expanded.append(new_event)
             current += timedelta(days=1)
         return expanded
+
+
+def parse_local_datetime(text: str, fmt: str, base_date: date) -> datetime:
+    """
+    Parse a date/time string that carries no year (e.g. '11 November 05:00PM').
+    The year is taken from base_date, rolled over once if the result lies before it.
+    """
+    parsed = None
+    for year in (base_date.year, base_date.year + 1):
+        parsed = datetime.strptime(f"{year} {text}", f"%Y {fmt}")
+        if parsed.date() >= base_date - timedelta(days=1):
+            break
+    return parsed
+
+
+def set_field(event: Event, field: str, value):
+    if field in event:
+        del event[field]
+    event.add(field, value)
+
+
+def build_split_events(event: Event, split_rules: list, geo_swapped: bool = False) -> list:
+    """
+    Create one new event per split rule from a single source event.
+
+    Each rule reads a local date/time (and optionally a location) from an event field via
+    regex. The new event ends at that time (anchor 'end', default) or starts at it
+    (anchor 'start'), and spans minutes_before / minutes_after around it.
+    """
+    dtstart = event.decoded("DTSTART")
+    base_date = dtstart.date() if isinstance(dtstart, datetime) else dtstart
+    tz = resolve_geo_timezone(event, geo_swapped)
+    uid = str(event.get("UID", ""))
+    result = []
+
+    for rule in split_rules:
+        label = rule.get("summary", "?")
+        spec = rule["datetime"]
+        text = str(event.get(spec.get("field", "DESCRIPTION"), ""))
+        match = re.search(spec["pattern"], text)
+        if not match:
+            print(f"    -> Warning: split '{label}' found no date/time, skipped")
+            continue
+
+        try:
+            anchor = parse_local_datetime(match.group(1), spec["format"], base_date)
+        except ValueError as e:
+            print(f"    -> Warning: split '{label}' could not parse '{match.group(1)}': {e}")
+            continue
+
+        # Shift on naive datetimes first, localize afterwards (pytz does not normalize DST on arithmetic)
+        if rule.get("anchor", "end") == "start":
+            naive_start = anchor
+            naive_end = anchor + timedelta(minutes=rule.get("minutes_after", 15))
+        else:
+            naive_start = anchor - timedelta(minutes=rule.get("minutes_before", 15))
+            naive_end = anchor
+
+        new_event = Event()
+        for key, val in event.items():
+            if key not in ("DTSTART", "DTEND", "UID"):
+                new_event.add(key, val)
+
+        set_field(new_event, "DTSTART", tz.localize(naive_start) if tz else naive_start)
+        set_field(new_event, "DTEND",   tz.localize(naive_end)   if tz else naive_end)
+        # Each split needs its own UID, otherwise calendar clients merge them into one event
+        set_field(new_event, "UID", f"{uid}-{rule.get('uid_suffix', len(result) + 1)}")
+        set_field(new_event, "SUMMARY", label)
+
+        loc = rule.get("location")
+        if loc:
+            loc_match = re.search(loc["pattern"], str(event.get(loc.get("field", "DESCRIPTION"), "")))
+            if loc_match:
+                set_field(new_event, "LOCATION", loc_match.group(1).strip())
+
+        result.append(new_event)
+
+    return result
 
 
 def build_vtimezone(tz_name: str) -> Timezone:
@@ -279,14 +359,28 @@ def transform_ics(input_path: str, rules_path: str, output_path: str):
         source_rules = []
         geo_swapped  = False
         expand_rule  = None
+        split_rules  = None
         for src in event_sources:
             source_rules.extend(src.get("rules", []))
             if src.get("geo_swapped", False):
                 geo_swapped = True
             if "expand_nightly" in src and expand_rule is None:
                 expand_rule = src["expand_nightly"]
+            if "split_events" in src and split_rules is None:
+                split_rules = src["split_events"]
 
         transform_event(component, source_rules, global_rules)
+
+        # Split one source event into several events (e.g. car pick-up and drop-off)
+        if split_rules:
+            result = build_split_events(component, split_rules, geo_swapped=geo_swapped)
+            if result:
+                print(f"    -> Split: {len(result)} event(s) generated")
+                for ev in result:
+                    collect_tz(ev, used_timezones)
+                    new_cal.add_component(ev)
+                continue
+            print("    -> Split produced no events, keeping original")
 
         dtstart      = component.decoded("DTSTART")
         is_date_only = isinstance(dtstart, date) and not isinstance(dtstart, datetime)
