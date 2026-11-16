@@ -278,25 +278,46 @@ def build_split_events(event: Event, split_rules: list, geo_swapped: bool = Fals
     return result
 
 
-def build_vtimezone(tz_name: str) -> Timezone:
-    """Build a VTIMEZONE component for the given IANA timezone name."""
+def build_vtimezone(tz_name: str, first_year: int = 2020) -> Timezone:
+    """
+    Build a VTIMEZONE component for the given IANA timezone name.
+
+    Every DST transition known to pytz (from first_year on) is written as its own
+    STANDARD/DAYLIGHT component. A single STANDARD + DAYLIGHT pair without RRULE would make
+    clients apply the last-defined offset forever, shifting events by an hour in the wrong season.
+    """
     tz = pytz.timezone(tz_name)
     tzc = Timezone()
     tzc.add("TZID", tz_name)
 
-    std = TimezoneStandard()
-    std.add("TZNAME",       tz.localize(datetime(2026, 1, 1)).strftime("%Z"))
-    std.add("DTSTART",      datetime(1970, 1, 1))
-    std.add("TZOFFSETFROM", tz.localize(datetime(2026, 6, 1)).utcoffset())
-    std.add("TZOFFSETTO",   tz.localize(datetime(2026, 1, 1)).utcoffset())
-    tzc.add_component(std)
+    times = getattr(tz, "_utc_transition_times", None)
+    info = getattr(tz, "_transition_info", None)
 
-    dst = TimezoneDaylight()
-    dst.add("TZNAME",       tz.localize(datetime(2026, 6, 1)).strftime("%Z"))
-    dst.add("DTSTART",      datetime(1970, 6, 1))
-    dst.add("TZOFFSETFROM", tz.localize(datetime(2026, 1, 1)).utcoffset())
-    dst.add("TZOFFSETTO",   tz.localize(datetime(2026, 6, 1)).utcoffset())
-    tzc.add_component(dst)
+    if not times or not info:
+        # Fixed offset zone (e.g. UTC): one STANDARD component is enough
+        offset = tz.utcoffset(datetime(2026, 1, 1))
+        std = TimezoneStandard()
+        std.add("TZNAME",       tz.tzname(datetime(2026, 1, 1)))
+        std.add("DTSTART",      datetime(1970, 1, 1))
+        std.add("TZOFFSETFROM", offset)
+        std.add("TZOFFSETTO",   offset)
+        tzc.add_component(std)
+        return tzc
+
+    # Start one transition before first_year so the offset in effect at the beginning is defined
+    first_idx = next((i for i, t in enumerate(times) if t.year >= first_year), len(times))
+    first_idx = max(first_idx - 1, 1)
+
+    for i in range(first_idx, len(times)):
+        offset_to, dst_delta, abbr = info[i]
+        offset_from = info[i - 1][0]
+        comp = TimezoneDaylight() if dst_delta else TimezoneStandard()
+        comp.add("TZNAME",       abbr)
+        # DTSTART is expressed in local time as it was before the transition
+        comp.add("DTSTART",      times[i] + offset_from)
+        comp.add("TZOFFSETFROM", offset_from)
+        comp.add("TZOFFSETTO",   offset_to)
+        tzc.add_component(comp)
 
     return tzc
 
